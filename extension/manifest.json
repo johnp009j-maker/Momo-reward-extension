@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "X Rewards",
+  "version": "1.0.0",
+  "description": "Earn points for liking and retweeting posts from a specific X account, redeemable in the shop.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://your-backend.up.railway.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["config.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "X Rewards Shop"
+  },
+  "icons": {
+    "128": "icon128.png"
+  }
+}

@@ -40,16 +40,44 @@
     return !!article.querySelector('[data-testid="unretweet"]');
   }
 
+function showToast(message, success) {
+    const toast = document.createElement("div");
+    toast.textContent = message;
+    toast.style.cssText = `
+      position: fixed; top: 80px; right: 20px; z-index: 999999;
+      background: ${success ? "#17bf63" : "#e0245e"}; color: white;
+      padding: 10px 16px; border-radius: 8px; font-family: sans-serif;
+      font-size: 14px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      opacity: 0; transition: opacity 0.3s;
+    `;
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => (toast.style.opacity = "1"));
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      setTimeout(() => toast.remove(), 300);
+    }, 2500);
+  }
+
   function reportAction(postId, action) {
     const key = `${postId}:${action}`;
     if (sentActions.has(key)) return;
     sentActions.add(key);
     persistSentActions();
 
-    chrome.runtime.sendMessage({
-      type: "XREWARDS_ACTION",
-      payload: { postId, action },
-    });
+    chrome.runtime.sendMessage(
+      { type: "XREWARDS_ACTION", payload: { postId, action } },
+      (response) => {
+        if (chrome.runtime.lastError || !response) {
+          showToast("X Rewards: couldn't reach server", false);
+          return;
+        }
+        if (response.awarded) {
+          showToast(`+${response.pointsAdded ?? ""} points! (${response.points} total)`, true);
+        } else {
+          showToast("Already claimed this one", false);
+        }
+      }
+    );
   }
 
   function scanTweets() {

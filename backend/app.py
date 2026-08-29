@@ -70,7 +70,7 @@ def init_db():
         db.executemany(
             "INSERT INTO shop_items (name, cost, image_filename) VALUES (?, ?, ?)",
             [
-                            ("Bonus Art #1", 50, "bonus_art_1.png"),
+            ("Bonus Art #1", 50, "bonus_art_1.png"),
             ("Bonus Art #2", 50, "bonus_art_2.png"),
             ("Bonus Art #3", 50, "bonus_art_3.png"),
             ("Bonus Art #4", 50, "bonus_art_4.png"),
@@ -100,6 +100,11 @@ def init_db():
             ("Bonus Art #28", 50, "bonus_art_28.png"),
             ("Bonus Art #29", 50, "bonus_art_29.png"),
             ("Bonus Art #30", 50, "bonus_art_30.png"),
+            ("Bonus Art #31", 100, "bonus_art_31.gif"),
+            ("Bonus Art #32", 100, "bonus_art_32.gif"),
+            ("Bonus Art #33", 100, "bonus_art_33.gif"),
+            ("Bonus Art #34", 100, "bonus_art_34.gif"),
+            ("Bonus Art #35", 100, "bonus_art_35.gif"),
             ],
         )
     db.commit()

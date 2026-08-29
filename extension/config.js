@@ -10,5 +10,5 @@ const CONFIG = {
   },
 
   // Your deployed Flask backend base URL (no trailing slash).
-  BACKEND_URL: "https://your-backend.up.railway.app",
+  BACKEND_URL: "https://momo-reward-extension-1.onrender.com",
 };

@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "X Rewards",
+  "name": "Momos Rewards",
   "version": "1.0.0",
   "description": "Earn points for liking and retweeting posts from a specific X account, redeemable in the shop.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://x.com/*",
     "https://twitter.com/*",
-    "https://your-backend.up.railway.app/*"
+"https://momo-reward-extension-1.onrender.com/*"
   ],
   "background": {
     "service_worker": "background.js"

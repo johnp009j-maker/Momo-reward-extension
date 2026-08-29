@@ -7,7 +7,7 @@ let currentBalance = 0;
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text;
-  statusEl.style.color = isError ? "#e0245e" : "#17bf63";
+  statusEl.style.color = isError ? "#e0245e" : "#8f5cff";
   if (text) setTimeout(() => (statusEl.textContent = ""), 2500);
 }
 
@@ -23,7 +23,7 @@ async function fetchBalance() {
   const res = await fetch(`${CONFIG.BACKEND_URL}/api/balance?device_id=${deviceId}`);
   const data = await res.json();
   currentBalance = data.points;
-  balanceEl.textContent = `${currentBalance} pts`;
+  balanceEl.textContent = `✨ ${currentBalance} pts`;
 }
 
 async function fetchShop() {
@@ -35,40 +35,56 @@ async function fetchShop() {
 function renderShop(items) {
   shopListEl.innerHTML = "";
   if (!items.length) {
-    shopListEl.innerHTML = '<p class="muted">No items yet.</p>';
+    shopListEl.innerHTML = '<p class="muted">No items yet 💭</p>';
     return;
   }
 
   items.forEach((item) => {
-    const row = document.createElement("div");
-    row.className = item.owned ? "item owned" : "item";
+    const card = document.createElement("div");
+    card.className = item.owned ? "item owned" : "item locked";
+
+    const tile = document.createElement("div");
+    tile.className = "item-tile";
 
     if (item.owned) {
       const img = document.createElement("img");
       img.className = "item-image";
       img.src = `${CONFIG.BACKEND_URL}/api/shop-image/${item.id}?device_id=${deviceId}`;
       img.alt = item.name;
-
-      const label = document.createElement("div");
-      label.className = "item-name";
-      label.textContent = item.name;
-
-      row.appendChild(img);
-      row.appendChild(label);
+      tile.appendChild(img);
     } else {
-      const info = document.createElement("div");
-      info.innerHTML = `<div class="item-name">🔒 ${item.name}</div><div class="item-cost">${item.cost} pts</div>`;
+      const lock = document.createElement("span");
+      lock.className = "lock-icon";
+      lock.textContent = "🔒";
+      tile.appendChild(lock);
+    }
+
+    const name = document.createElement("div");
+    name.className = "item-name";
+    name.textContent = item.name;
+
+    card.appendChild(tile);
+    card.appendChild(name);
+
+    if (item.owned) {
+      const badge = document.createElement("div");
+      badge.className = "owned-badge";
+      badge.textContent = "✓ Unlocked";
+      card.appendChild(badge);
+    } else {
+      const cost = document.createElement("div");
+      cost.className = "item-cost";
+      cost.textContent = `${item.cost} pts`;
+      card.appendChild(cost);
 
       const btn = document.createElement("button");
       btn.textContent = "Unlock";
       btn.disabled = currentBalance < item.cost;
       btn.addEventListener("click", () => redeem(item.id, btn));
-
-      row.appendChild(info);
-      row.appendChild(btn);
+      card.appendChild(btn);
     }
 
-    shopListEl.appendChild(row);
+    shopListEl.appendChild(card);
   });
 }
 
@@ -88,7 +104,7 @@ async function redeem(itemId, btn) {
       return;
     }
 
-    setStatus("Unlocked!");
+    setStatus("Unlocked! 🎉");
     await fetchBalance();
     await fetchShop();
   } catch (err) {

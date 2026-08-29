@@ -1,37 +1,26 @@
 import os
-import sqlite3
 from datetime import datetime, timezone
 
-from flask import Flask, g, jsonify, request, send_from_directory
+import psycopg2
+import psycopg2.extras
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-DB_PATH = os.environ.get("DB_PATH", "rewards.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 IMAGES_DIR = os.environ.get("SHOP_IMAGES_DIR", os.path.join(os.path.dirname(__file__), "shop_images"))
 
 app = Flask(__name__)
-# Requests come from the extension's own chrome-extension:// origin, which
-# is unpredictable per-install, so we allow all origins on the API routes.
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 
 def get_db():
-    if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-    return g.db
-
-
-@app.teardown_appcontext
-def close_db(_exc):
-    db = g.pop("db", None)
-    if db is not None:
-        db.close()
+    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.executescript(
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
             device_id TEXT PRIMARY KEY,
@@ -48,28 +37,25 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS shop_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             cost INTEGER NOT NULL,
             image_filename TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS redemptions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             device_id TEXT NOT NULL,
             item_id INTEGER NOT NULL,
             redeemed_at TEXT NOT NULL
         );
         """
     )
-    # Seed a couple of placeholder shop items if the table is empty.
-    # Drop real image files into backend/shop_images/ and reference the
-    # filename here (see README).
-    row = db.execute("SELECT COUNT(*) AS c FROM shop_items").fetchone()
-    if row["c"] == 0:
-        db.executemany(
-            "INSERT INTO shop_items (name, cost, image_filename) VALUES (?, ?, ?)",
-            [
+    conn.commit()
+
+    cur.execute("SELECT COUNT(*) AS c FROM shop_items")
+    if cur.fetchone()["c"] == 0:
+        seed = [
             ("Bonus Art #1", 50, "bonus_art_1.png"),
             ("Bonus Art #2", 50, "bonus_art_2.png"),
             ("Bonus Art #3", 50, "bonus_art_3.png"),
@@ -106,28 +92,34 @@ def init_db():
             ("Bonus Art #34", 100, "bonus_art_34.gif"),
             ("Bonus Art #35", 100, "bonus_art_35.gif"),
             ("Bonus Art #36", 100, "bonus_art_36.gif"),
-
-            ],
+        ]
+        psycopg2.extras.execute_values(
+            cur,
+            "INSERT INTO shop_items (name, cost, image_filename) VALUES %s",
+            seed,
         )
-    db.commit()
-    db.close()
+        conn.commit()
+
+    cur.close()
+    conn.close()
 
 
-def get_or_create_user(db, device_id):
-    row = db.execute("SELECT * FROM users WHERE device_id = ?", (device_id,)).fetchone()
+def get_or_create_user(cur, device_id):
+    cur.execute("SELECT * FROM users WHERE device_id = %s", (device_id,))
+    row = cur.fetchone()
     if row is None:
-        db.execute("INSERT INTO users (device_id, points) VALUES (?, 0)", (device_id,))
-        db.commit()
-        row = db.execute("SELECT * FROM users WHERE device_id = ?", (device_id,)).fetchone()
+        cur.execute("INSERT INTO users (device_id, points) VALUES (%s, 0)", (device_id,))
+        cur.execute("SELECT * FROM users WHERE device_id = %s", (device_id,))
+        row = cur.fetchone()
     return row
 
 
-def is_owned(db, device_id, item_id):
-    row = db.execute(
-        "SELECT 1 FROM redemptions WHERE device_id = ? AND item_id = ?",
+def is_owned(cur, device_id, item_id):
+    cur.execute(
+        "SELECT 1 FROM redemptions WHERE device_id = %s AND item_id = %s",
         (device_id, item_id),
-    ).fetchone()
-    return row is not None
+    )
+    return cur.fetchone() is not None
 
 
 @app.post("/api/award")
@@ -141,23 +133,32 @@ def award():
     if not all([device_id, post_id, action]) or not isinstance(points, int):
         return jsonify({"error": "device_id, post_id, action, and integer points are required"}), 400
 
-    db = get_db()
-    get_or_create_user(db, device_id)
+    conn = get_db()
+    cur = conn.cursor()
+    get_or_create_user(cur, device_id)
+    conn.commit()
 
     try:
-        db.execute(
-            "INSERT INTO awarded_actions (device_id, post_id, action, points, created_at) VALUES (?, ?, ?, ?, ?)",
+        cur.execute(
+            "INSERT INTO awarded_actions (device_id, post_id, action, points, created_at) VALUES (%s, %s, %s, %s, %s)",
             (device_id, post_id, action, points, datetime.now(timezone.utc).isoformat()),
         )
-    except sqlite3.IntegrityError:
-        # Already awarded for this device/post/action - no-op.
-        row = db.execute("SELECT points FROM users WHERE device_id = ?", (device_id,)).fetchone()
+        conn.commit()
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        cur.execute("SELECT points FROM users WHERE device_id = %s", (device_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
         return jsonify({"awarded": False, "points": row["points"]})
 
-    db.execute("UPDATE users SET points = points + ? WHERE device_id = ?", (points, device_id))
-    db.commit()
+    cur.execute("UPDATE users SET points = points + %s WHERE device_id = %s", (points, device_id))
+    conn.commit()
 
-    row = db.execute("SELECT points FROM users WHERE device_id = ?", (device_id,)).fetchone()
+    cur.execute("SELECT points FROM users WHERE device_id = %s", (device_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
     return jsonify({"awarded": True, "points": row["points"]})
 
 
@@ -167,22 +168,30 @@ def balance():
     if not device_id:
         return jsonify({"error": "device_id is required"}), 400
 
-    db = get_db()
-    row = get_or_create_user(db, device_id)
+    conn = get_db()
+    cur = conn.cursor()
+    row = get_or_create_user(cur, device_id)
+    conn.commit()
+    cur.close()
+    conn.close()
     return jsonify({"points": row["points"]})
 
 
 @app.get("/api/shop")
 def shop():
     device_id = request.args.get("device_id")
-    db = get_db()
-    rows = db.execute("SELECT id, name, cost FROM shop_items ORDER BY cost ASC").fetchall()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, cost FROM shop_items ORDER BY cost ASC")
+    rows = cur.fetchall()
 
     items = []
     for r in rows:
-        owned = bool(device_id) and is_owned(db, device_id, r["id"])
+        owned = bool(device_id) and is_owned(cur, device_id, r["id"])
         items.append({"id": r["id"], "name": r["name"], "cost": r["cost"], "owned": owned})
 
+    cur.close()
+    conn.close()
     return jsonify(items)
 
 
@@ -192,11 +201,19 @@ def shop_image(item_id):
     if not device_id:
         return jsonify({"error": "device_id is required"}), 400
 
-    db = get_db()
-    if not is_owned(db, device_id, item_id):
+    conn = get_db()
+    cur = conn.cursor()
+    owned = is_owned(cur, device_id, item_id)
+    if not owned:
+        cur.close()
+        conn.close()
         return jsonify({"error": "Not redeemed yet"}), 403
 
-    item = db.execute("SELECT image_filename FROM shop_items WHERE id = ?", (item_id,)).fetchone()
+    cur.execute("SELECT image_filename FROM shop_items WHERE id = %s", (item_id,))
+    item = cur.fetchone()
+    cur.close()
+    conn.close()
+
     if item is None:
         return jsonify({"error": "Item not found"}), 404
 
@@ -212,23 +229,34 @@ def redeem():
     if not device_id or not item_id:
         return jsonify({"error": "device_id and item_id are required"}), 400
 
-    db = get_db()
-    user = get_or_create_user(db, device_id)
-    item = db.execute("SELECT * FROM shop_items WHERE id = ?", (item_id,)).fetchone()
+    conn = get_db()
+    cur = conn.cursor()
+    user = get_or_create_user(cur, device_id)
+    conn.commit()
+
+    cur.execute("SELECT * FROM shop_items WHERE id = %s", (item_id,))
+    item = cur.fetchone()
 
     if item is None:
+        cur.close()
+        conn.close()
         return jsonify({"error": "Item not found"}), 404
     if user["points"] < item["cost"]:
+        cur.close()
+        conn.close()
         return jsonify({"error": "Not enough points"}), 400
 
-    db.execute("UPDATE users SET points = points - ? WHERE device_id = ?", (item["cost"], device_id))
-    db.execute(
-        "INSERT INTO redemptions (device_id, item_id, redeemed_at) VALUES (?, ?, ?)",
+    cur.execute("UPDATE users SET points = points - %s WHERE device_id = %s", (item["cost"], device_id))
+    cur.execute(
+        "INSERT INTO redemptions (device_id, item_id, redeemed_at) VALUES (%s, %s, %s)",
         (device_id, item_id, datetime.now(timezone.utc).isoformat()),
     )
-    db.commit()
+    conn.commit()
 
-    row = db.execute("SELECT points FROM users WHERE device_id = ?", (device_id,)).fetchone()
+    cur.execute("SELECT points FROM users WHERE device_id = %s", (device_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
     return jsonify({"points": row["points"]})
 
 

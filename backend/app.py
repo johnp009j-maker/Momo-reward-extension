@@ -105,6 +105,8 @@ def init_db():
             ("Bonus Art #33", 100, "bonus_art_33.gif"),
             ("Bonus Art #34", 100, "bonus_art_34.gif"),
             ("Bonus Art #35", 100, "bonus_art_35.gif"),
+            ("Bonus Art #36", 100, "bonus_art_36.gif"),
+
             ],
         )
     db.commit()

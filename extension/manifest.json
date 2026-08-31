@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Momos Rewards",
   "version": "1.0.0",
-  "description": "Earn points for liking and retweeting posts from a specific X account, redeemable in the shop.",
+  "description": "Like and retweet Momo's posts for points.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://x.com/*",
@@ -17,6 +17,12 @@
       "matches": ["https://x.com/*", "https://twitter.com/*"],
       "js": ["config.js", "content.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["audio/*", "images/*"],
+      "matches": ["https://x.com/*", "https://twitter.com/*"]
     }
   ],
   "action": {

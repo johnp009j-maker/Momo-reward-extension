@@ -151,7 +151,7 @@ function showToast(message, success) {
     const toast = document.createElement("div");
     toast.textContent = message;
     toast.style.position = "fixed";
-    toast.style.top = "90px";
+    toast.style.top = "20px";
     toast.style.left = "50%";
     toast.style.transform = "translateX(-50%)";
     toast.style.zIndex = "999999";
